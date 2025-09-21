@@ -310,7 +310,7 @@
         // 화살표: 수평 활주 모드로 전환
         if(arrow){ arrowMode = true; arrowDir = arrow; ball.vx = arrow * ARROW_SPEED; ball.vy = 0; ball.y = newY; return; }
         // 일반/점퍼 튕김
-        ball.vy = hitJumper ? BOUNCE_VY * 1.5 : BOUNCE_VY;
+        ball.vy = hitJumper ? BOUNCE_VY * 1.65 : BOUNCE_VY;
         if(hitWhite && whiteCR) setTile(whiteCR[0], whiteCR[1], T.EMPTY);
       } else { // 천장
         const tileR = Math.floor(probeY / TILE);
