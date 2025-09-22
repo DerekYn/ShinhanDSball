@@ -5,28 +5,108 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>미니게임: 튀는 공 (Stage 1 → 5, S=Spawn, 화살표=수평활주)</title>
   <style>
-    html, body { height: 100%; margin: 0; background:#111; color:#ddd; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-    .wrap { display:flex; flex-direction:column; align-items:center; gap:8px; padding:12px; }
-    canvas { image-rendering: pixelated; image-rendering: crisp-edges; background:#000; border:2px solid #444; }
-    .hud { font-size: 14px; opacity: .9; text-align:center; }
-    .hud kbd { background:#222; border:1px solid #444; border-bottom-color:#222; padding:1px 6px; border-radius:4px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .badge { display:inline-block; background:#222; border:1px solid #444; padding:2px 8px; border-radius:999px; margin-left:6px; font-size:12px; }
+    /* 기본 레이아웃: 중앙 정렬 + 스크롤 제거 */
+    html, body {
+      height: 100%;
+      margin: 0;
+      background:#111;
+      color:#ddd;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      overflow: hidden; /* 스크롤 제거 */
+      touch-action: none;
+      overscroll-behavior: contain;
+    }
+    .wrap {
+      display:flex;
+      flex-direction:column;
+      align-items:center;      /* 가로 가운데 */
+      justify-content:center;  /* 세로 가운데 */
+      gap:8px;
+      width:100%;
+      height:100%;
+      box-sizing:border-box;
+      padding:12px;
+    }
+    .title {
+      font-size: 20px;
+      font-weight: bold;
+      color: #fff;
+      margin-bottom: 6px;
+      text-align: center;
+      user-select: none;
+    }
+    canvas {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      background:#000;
+      border:2px solid #444;
+      max-width:96vw;
+      max-height:80dvh;
+    }
+    .hud {
+      font-size: 14px;
+      opacity: .9;
+      text-align:center;
+      user-select: none;
+    }
+    .hud kbd {
+      background:#222;
+      border:1px solid #444;
+      border-bottom-color:#222;
+      padding:1px 6px;
+      border-radius:4px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .badge {
+      display:inline-block;
+      background:#222;
+      border:1px solid #444;
+      padding:2px 8px;
+      border-radius:999px;
+      margin-left:6px;
+      font-size:12px;
+    }
+
+    /* 오버레이 모달 */
+    .overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+      background:rgba(0,0,0,.45); backdrop-filter: blur(2px); z-index:10; }
+    .overlay.hidden { display:none; }
+    .modal { min-width: min(90vw, 440px); max-width: 92vw; background:#1c1c1c;
+      border:1px solid #444; border-radius:12px; padding:16px 18px; box-shadow:0 8px 30px rgba(0,0,0,.5); }
+    .modal h2 { margin:0 0 8px; font-size:20px; }
+    .modal .body { white-space:pre-line; line-height:1.45; margin-bottom:12px; }
+    .actions { display:flex; gap:10px; justify-content:flex-end; }
+    .actions button { padding:8px 12px; border-radius:10px; border:1px solid #555; background:#2a2a2a; color:#eee; cursor:pointer; }
+    .actions .primary { background:#3b82f6; border-color:#2a6adf; color:#fff; }
+    .actions button:active { transform:translateY(1px); }
   </style>
 </head>
 <body>
 <div class="wrap">
+  <div class="title" id="pageTitle">🦖 Shinhan bouncy ball</div>
   <canvas id="game" width="640" height="480"></canvas>
   <div class="hud">
     방향만 조작 → <kbd>◀</kbd>/<kbd>▶</kbd> (또는 <kbd>A</kbd>/<kbd>D</kbd>) · 일시정지 <kbd>P</kbd>
-    <div class="badge">R=벽 W=1회용 J=점퍼 B=폭탄 < >=화살표(수평 활주) G=Goal S=Spawn</div>
-    <div>낙하=Game Over(스테이지 리셋). 스폰은 각 스테이지 배열 내 <b>S</b> 위치를 사용(없으면 기본값).</div>
   </div>
 </div>
+
+<!-- 가운데 오버레이 -->
+<div id="overlay" class="overlay hidden">
+  <div class="modal">
+    <h2 id="ovTitle">알림</h2>
+    <div id="ovBody" class="body">내용</div>
+    <div class="actions">
+      <button id="btnRestartStage1" class="primary">스테이지 1부터 다시</button>
+      <button id="btnCloseOverlay">닫기</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function(){
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height; // 640x480
+  const W = canvas.width, H = canvas.height; // 640x480 논리 해상도
   const TILE = 16;                           // 40x30 그리드
   const COLS = Math.floor(W / TILE);
   const ROWS = Math.floor(H / TILE);
@@ -35,7 +115,7 @@
   const GRAVITY = 1200;     // px/s^2
   const BOUNCE_VY = -420;   // 기본 점프(위 음수)
   const H_SPEED = 70;       // 일반 좌/우 이동 속도
-  const ARROW_SPEED = 300; // 화살표 활주 전용 속도 (여기를 바꾸면 됩니다!)       // 수평 속도(방향만 바꿈)
+  const ARROW_SPEED = 300;  // 화살표 활주 전용 속도
 
   // 입력
   const keys = new Set();
@@ -46,11 +126,11 @@
   const T = { EMPTY:0, RED:1, WHITE:2, GOAL:3, JUMPER:4, BOMB:5, ARROW_LEFT:6, ARROW_RIGHT:7 };
 
   // ====== 스테이지 원본(20x15, S=Spawn 지원) ======
-  // Stage 1: 최신 요청 반영본
+  // Stage 1
   const level1_base = [
     "RRRRRRRRRRRRRRRRRRRR",
     "R..................R",
-    "R..................R",
+    "R.S................R",
     "R..................R",
     "R..................R",
     "R.....RRRRRRR......R",
@@ -69,7 +149,7 @@
   const level2_base = [
     "RRRRRRRRRRRRRRRRRRRR",
     "R..................R",
-    "R..................R",
+    "R.S................R",
     "R..................R",
     "R..................R",
     "R..................R",
@@ -88,7 +168,7 @@
   const level3_base = [
     "RRRRRRRRRRRRRRRRRRRR",
     "R..................R",
-    "R..................R",
+    "R.S................R",
     "R..................R",
     "R..................R",
     "R..................R",
@@ -103,10 +183,10 @@
     "RRRRR..............R"
   ];
 
-  // Stage 4
+  // Stage 4 (S 미지정 → 기본 스폰 좌표 사용)
   const level4_base = [
     "RRRRRRRRRRRRRRRRRRRR",
-    "R..................R",
+    "R.S................R",
     "R..................R",
     "R..................R",
     "R..................R",
@@ -122,23 +202,22 @@
     "R..............RRRRR"
   ];
 
-  // ===== Stage 5 (20x15 → 2배, 폭탄 B / 화살표 < > ) =====
-  // 이미지 레이아웃을 근사. 자유 편집 가능
+  // Stage 5 (폭탄/화살표) - 사용자가 지정한 최신본
   const level5_base = [
     "RRRRRRRRRRRRRRRRRRRR",
     "R................S.R",
-	"R..................R",
-	"R..................R",
+    "R..................R",
+    "R..................R",
     "R.....RRBRRRBRRRRRRR",
     "R................R.R",
-	"R................R.R",
+    "R................R.R",
     "RBBRRR>..........R.R",
     "R......BBBBBB....R.R",
     "R................R.R",
     "R................R.R",
-	"R................R.R",
+    "R................R.R",
     "R.....RRRRRRRRRRRR.R",
-    "R..................R",
+    "R..................G",
     "R...>..............G"
   ];
 
@@ -148,14 +227,12 @@
     const out = [];
     for(let r=0;r<baseLines.length;r++){
       const row = baseLines[r];
-      // 스폰 탐색: base 그리드에서 S 좌표를 찾아 업스케일 좌표로 변환
       const cS = row.indexOf('S');
       if(cS !== -1){
         const sr = r*scale + Math.floor(scale/2);
         const sc = cS*scale + Math.floor(scale/2);
         spawn = {x: sc, y: sr};
       }
-      // 업스케일(문자 반복). S는 빈칸으로 대체
       let scaledRow = '';
       for(const ch of row){
         const rep = (ch==='S'?'.':ch).repeat(scale);
@@ -196,7 +273,7 @@
     { grid: parseLevel(up1.lines), spawn: up1.spawn || {x:6, y:6} },
     { grid: parseLevel(up2.lines), spawn: up2.spawn || {x:6, y:6} },
     { grid: parseLevel(up3.lines), spawn: up3.spawn || {x:3, y:12} },
-    { grid: parseLevel(up4.lines), spawn: up4.spawn || {x:2, y:12} },
+    { grid: parseLevel(up4.lines), spawn: up4.spawn || {x:4, y:6} },  // stage4 안전 스폰(기본값)
     { grid: parseLevel(up5.lines), spawn: up5.spawn || {x:2, y:2} }
   ];
 
@@ -213,6 +290,39 @@
   let messageText = '';
   let arrowMode = false; // 화살표 수평 활주
   let arrowDir = 0;      // -1/0/+1
+
+  // 기록(최종 결과용)
+  let startTime = performance.now();
+  let failCount = 0;
+
+  // ===== Overlay (modal) =====
+  const overlay = document.getElementById('overlay');
+  const ovTitle = document.getElementById('ovTitle');
+  const ovBody  = document.getElementById('ovBody');
+  const btnRestartStage1 = document.getElementById('btnRestartStage1');
+  const btnCloseOverlay  = document.getElementById('btnCloseOverlay');
+
+  function showOverlay({ title, html, showRestart1=false }) {
+    ovTitle.textContent = title;
+    ovBody.innerHTML    = html;
+    btnRestartStage1.style.display = showRestart1 ? 'inline-flex' : 'none';
+    overlay.classList.remove('hidden');
+    paused = true;
+  }
+  function hideOverlay(){
+    overlay.classList.add('hidden');
+    paused = false;
+  }
+  btnCloseOverlay?.addEventListener('click', () => hideOverlay());
+  btnRestartStage1?.addEventListener('click', () => {
+    // 스테이지1부터 재시작
+    stage = 0;
+    grid = levels[stage].grid.map(row=>row.slice());
+    startTime = performance.now();
+    failCount = 0;
+    applySpawn();
+    hideOverlay();
+  });
 
   function applySpawn(){
     const s = levels[stage].spawn || {x:6, y:6};
@@ -253,7 +363,7 @@
         const tileC = Math.floor(probeX / TILE);
         if(signX>0) newX = tileC * TILE - ball.radius - 0.01; else newX = (tileC+1) * TILE + ball.radius + 0.01;
         ball.x = newX;
-        // 벽에 닿으면 활주 종료 → 즉시 수직 튀김 시작
+        // 벽에 닿으면 활주 종료 → 즉시 수직 튕김 시작
         arrowMode = false; arrowDir = 0; ball.vx = 0; ball.vy = BOUNCE_VY;
       } else {
         ball.x = newX;
@@ -330,18 +440,40 @@
   }
 
   function gameOver(){
-    messageText = 'GAME OVER';
-    messageTimer = 1.0;
+    failCount++;
     grid = levels[stage].grid.map(row=>row.slice());
     applySpawn();
+    showOverlay({
+      title: 'GAME OVER',
+      html: `스테이지 ${stage+1}에서 실패했습니다.\n다시 도전해보세요!`
+    });
   }
 
   function nextStage(){
-    messageText = 'STAGE CLEAR';
-    messageTimer = 1.0;
-    stage = (stage+1) % levels.length;
+    // 마지막 스테이지 클리어?
+    if(stage === levels.length - 1){
+      const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+      showOverlay({
+        title: '축하합니다! 모든 스테이지 클리어 🎉',
+        html: `걸린 시간: <b>${elapsed}초</b><br>실패 횟수: <b>${failCount}</b>`,
+        showRestart1: true
+      });
+      return;
+    }
+    // 다음 스테이지로
+    stage++;
     grid = levels[stage].grid.map(row=>row.slice());
     applySpawn();
+
+    // (선택) 캔버스 내 메시지 표시
+    messageText = 'STAGE CLEAR';
+    messageTimer = 1.2;
+
+    // 스테이지1 진입 시 기록 초기화
+    if(stage === 0){
+      startTime = performance.now();
+      failCount = 0;
+    }
   }
 
   // 렌더링
@@ -397,7 +529,9 @@
           ctx.strokeRect(x+0.5, y+0.5, TILE-1, TILE-1);
           ctx.fillStyle = '#3a2c06';
           ctx.beginPath();
-          if(t===T.ARROW_RIGHT){ctx.moveTo(x+5,y+4);ctx.lineTo(x+11,y+8);ctx.lineTo(x+5,y+12);} else {ctx.moveTo(x+11,y+4);ctx.lineTo(x+5,y+8);ctx.lineTo(x+11,y+12);} ctx.closePath();
+          if(t===T.ARROW_RIGHT){ctx.moveTo(x+5,y+4);ctx.lineTo(x+11,y+8);ctx.lineTo(x+5,y+12);} 
+          else {ctx.moveTo(x+11,y+4);ctx.lineTo(x+5,y+8);ctx.lineTo(x+11,y+12);} 
+          ctx.closePath();
           ctx.fill();
         }
       }
@@ -416,6 +550,7 @@
     ctx.lineTo(ball.x - ball.vx*0.05, ball.y - ball.vy*0.05);
     ctx.stroke();
 
+    // 상단 메시지 바(선택)
     if(messageTimer>0){
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
       ctx.fillRect(0,0,W,24);
