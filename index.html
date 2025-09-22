@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>미니게임: 튀는 공 (Tablet Controls, Fixed)</title>
+  <title>🦖 Shinhan bouncy ball</title>
   <style>
     html, body {
       height: 100%;
@@ -11,7 +11,7 @@
       background:#111;
       color:#ddd;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      overflow: hidden;
+      overflow: hidden;           /* 스크롤 제거 */
       touch-action: none;
       overscroll-behavior: contain;
     }
@@ -44,14 +44,11 @@
     }
     .hud { font-size: 14px; opacity: .9; text-align:center; user-select: none; }
     .hud kbd { background:#222; border:1px solid #444; border-bottom-color:#222; padding:1px 6px; border-radius:4px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .badge { display:inline-block; background:#222; border:1px solid #444; padding:2px 8px; border-radius:999px; margin-left:6px; font-size:12px; }
-
     .controls { display:flex; gap:12px; user-select:none; }
     .controls button { font-size:20px; padding:14px 18px; border-radius:12px; background:#222; color:#eee; border:1px solid #555; cursor:pointer; min-width:64px; }
     .controls button:active { transform: translateY(1px); }
-
     .overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-      background:rgba(0,0,0,.45); backdrop-filter: blur(2px); z-index:10; }
+      background:rgba(0,0,0,.5); backdrop-filter: blur(2px); z-index:10; }
     .overlay.hidden { display:none; }
     .modal { min-width: min(90vw, 440px); max-width: 92vw; background:#1c1c1c;
       border:1px solid #444; border-radius:12px; padding:16px 18px; box-shadow:0 8px 30px rgba(0,0,0,.5); }
@@ -65,12 +62,10 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="title" id="pageTitle"> <!-- 제목을 채우세요 --> </div>
+  <div class="title" id="pageTitle"> 🦖 Shinhan bouncy ball </div>
   <canvas id="game" width="640" height="480"></canvas>
   <div class="hud">
     방향만 조작 → <kbd>◀</kbd>/<kbd>▶</kbd> (또는 <kbd>A</kbd>/<kbd>D</kbd>) · 일시정지 <kbd>P</kbd>
-    <div class="badge">R=벽 W=1회용 J=점퍼 B=폭탄 < >=화살표(수평 활주) G=Goal S=Spawn</div>
-    <div>낙하=Game Over(스테이지 리셋). 스폰은 각 스테이지 배열 내 <b>S</b> 위치를 사용(없으면 기본값).</div>
   </div>
   <div class="controls">
     <button id="btnLeft"  aria-label="Left">◀</button>
@@ -91,19 +86,116 @@
 </div>
 
 <script>
+/* =======================
+   스테이지 정의 (고정)
+======================= */
+const level1_base = [
+  "RRRRRRRRRRRRRRRRRRRR",
+  "R..................R",
+  "R.S................R",
+  "R..................R",
+  "R..................R",
+  "R.....RRRRRRR......R",
+  "R....RR..RRRR......R",
+  "R...RRR.R.RRR......R",
+  "R..RRRR.R.RRR......R",
+  "R.RRRRR..RRRR......R",
+  "RRRRRRRRR...RWWWWWWR",
+  "RRRRRRRRR.RRR......R",
+  "RRRRRRRRRR.RR......R",
+  "RRRRRRRRRRR.R......G",
+  "RRRRRRRRR...RRRRRRRR"
+];
+const level2_base = [
+  "RRRRRRRRRRRRRRRRRRRR",
+  "R..................R",
+  "R.S...RR...........R",
+  "R.....R.R..........R",
+  "R.....R.R...RRR....R",
+  "R.....R.R...R......R",
+  "R.....RR.....R.....R",
+  "R.............R....R",
+  "R...........RRR....R",
+  "R..................R",
+  "R..................R",
+  "RRRRR..............G",
+  "RRRRR....RRRR.RRRRRR",
+  "RRRRR.RRRRR........R",
+  "RRRRR.RRRRR........R"
+];
+const level3_base = [
+  "RRRRRRRRRRRRRRRRRRRR",
+  "R..................R",
+  "R.S................R",
+  "R..................R",
+  "R..................R",
+  "R..................R",
+  "R..................R",
+  "R..............JJ..R",
+  "R...........J......G",
+  "R........J........RR",
+  "R.....J............R",
+  "R...R..............R",
+  "R..R...............R",
+  "R..................R",
+  "RRRRR..............R"
+];
+const level4_base = [
+  "RRRRRRRRRRRRRRRRRRRR",
+  "R..................R",
+  "R.S................R",
+  "R..................R",
+  "R..................R",
+  "RRRRRWWWWWRRRRRRRRRR",
+  "R...........R......R",
+  "R...........R......R",
+  "R...........R......R",
+  "R...........R......R",
+  "R...........R......R",
+  "R..................R",
+  "R..................G",
+  "R....RRRRWWWWJ.RRRRR",
+  "R..............RRRRR"
+];
+const level5_base = [
+  "RRRRRRRRRRRRRRRRRRRR",
+  "R................S.R",
+  "R..................R",
+  "R..................R",
+  "R.....RRBRRRBRRRRRRR",
+  "R................R.R",
+  "R................R.R",
+  "RBBRRR>..........R.R",
+  "R......BBBBBB....R.R",
+  "R................R.R",
+  "R................R.R",
+  "R................R.R",
+  "R.....RRRRRRRRRRRR.R",
+  "R..................G",
+  "R...>..............G"
+];
+
+/* =======================
+   게임 엔진
+======================= */
 (function(){
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
   const TILE = 16, COLS = Math.floor(W/TILE), ROWS = Math.floor(H/TILE);
 
-  const GRAVITY = 1200, BOUNCE_VY = -420, H_SPEED = 70, ARROW_SPEED = 300;
+  // 물리 상수
+  const GRAVITY = 1200;     // px/s^2
+  const BOUNCE_VY = -420;   // 기본 점프 속도(위 음수)
+  const H_SPEED = 70;       // 좌우 이동 속도
+  const ARROW_SPEED = 300;  // 화살표 활주 속도
 
+  // 입력
   const keys = new Set();
   window.addEventListener('keydown', (e)=>{ keys.add(e.key.toLowerCase()); if(e.key==='p'||e.key==='P') paused = !paused; });
   window.addEventListener('keyup',   (e)=>{ keys.delete(e.key.toLowerCase()); });
 
-  // onscreen controls + canvas touch halves
+  // 온스크린 버튼 + 캔버스 좌/우 터치
   const btnLeft  = document.getElementById('btnLeft');
   const btnRight = document.getElementById('btnRight');
   const btnPause = document.getElementById('btnPause');
@@ -138,94 +230,10 @@
     }, {passive:false});
   });
 
+  // 타일 타입
   const T = { EMPTY:0, RED:1, WHITE:2, GOAL:3, JUMPER:4, BOMB:5, ARROW_LEFT:6, ARROW_RIGHT:7 };
 
-  const level1_base = [
-    "RRRRRRRRRRRRRRRRRRRR",
-    "R..................R",
-    "R.S................R",
-    "R..................R",
-    "R..................R",
-    "R.....RRRRRRR......R",
-    "R....RR..RRRR......R",
-    "R...RRR.R.RRR......R",
-    "R..RRRR.R.RRR......R",
-    "R.RRRRR..RRRR......R",
-    "RRRRRRRRR...RWWWWWWR",
-    "RRRRRRRRR.RRR......R",
-    "RRRRRRRRRR.RR......R",
-    "RRRRRRRRRRR.R......G",
-    "RRRRRRRRR...RRRRRRRR"
-  ];
-  const level2_base = [
-    "RRRRRRRRRRRRRRRRRRRR",
-    "R..................R",
-    "R.S................R",
-    "R..................R",
-    "R..................R",
-    "R..................R",
-    "R..................R",
-    "R..................R",
-    "R..................R",
-    "R..................R",
-    "R..................R",
-    "RRRRR..............G",
-    "RRRRR....RRRR.RRRRRR",
-    "RRRRR.RRRRR........R",
-    "RRRRR.RRRRR........R"
-  ];
-  const level3_base = [
-    "RRRRRRRRRRRRRRRRRRRR",
-    "R..................R",
-    "R.S................R",
-    "R..................R",
-    "R..................R",
-    "R..................R",
-    "R..................R",
-    "R..............JJ..R",
-    "R...........J......G",
-    "R........J........RR",
-    "R.....J............R",
-    "R...R..............R",
-    "R..R...............R",
-    "R..................R",
-    "RRRRR..............R"
-  ];
-  const level4_base = [
-    "RRRRRRRRRRRRRRRRRRRR",
-    "R..................R",
-    "R.S................R",
-    "R..................R",
-    "R..................R",
-    "RRRRRWWWWWRRRRRRRRRR",
-    "R...........R......R",
-    "R...........R......R",
-    "R...........R......R",
-    "R...........R......R",
-    "R...........R......R",
-    "R..................R",
-    "R..................G",
-    "R....RRRRWWWWJ.RRRRR",
-    "R..............RRRRR"
-  ];
-  const level5_base = [
-    "RRRRRRRRRRRRRRRRRRRR",
-    "R................S.R",
-    "R..................R",
-    "R..................R",
-    "R.....RRBRRRBRRRRRRR",
-    "R................R.R",
-    "R................R.R",
-    "RBBRRR>..........R.R",
-    "R......BBBBBB....R.R",
-    "R................R.R",
-    "R................R.R",
-    "R................R.R",
-    "R.....RRRRRRRRRRRR.R",
-    "R..................G",
-    "R...>..............G"
-  ];
-
+  // 업스케일 + S 스폰 추출(20x15 → 40x30)
   function upscaleWithSpawn(baseLines, scale=2){
     let spawn = null;
     const out = [];
@@ -252,6 +260,7 @@
   const up4 = upscaleWithSpawn(level4_base, 2);
   const up5 = upscaleWithSpawn(level5_base, 2);
 
+  // 파서: 문자 → 타일
   function parseLevel(lines){
     const grid = [];
     for(let r=0;r<ROWS;r++){
@@ -282,43 +291,59 @@
   let stage = 0;
   let grid = levels[stage].grid.map(row=>row.slice());
 
+  // 공
   const ball = { x:0, y:0, radius:3, vx:0, vy:0 };
 
+  // 상태
   let last = performance.now();
   let paused = false;
   let messageTimer = 0;
   let messageText = '';
-  let arrowMode = false;
-  let arrowDir = 0;
+  let arrowMode = false; // 화살표 수평 활주
+  let arrowDir = 0;      // -1/0/+1
 
+  // 타이머/실패 기록 + 최종 모달 플래그
   let startTime = performance.now();
   let failCount = 0;
+  let finalClearShown = false;
 
-  // Overlay (single definition)
+  // 오버레이
   const overlay = document.getElementById('overlay');
   const ovTitle = document.getElementById('ovTitle');
   const ovBody  = document.getElementById('ovBody');
   const btnRestartStage1 = document.getElementById('btnRestartStage1');
   const btnCloseOverlay  = document.getElementById('btnCloseOverlay');
 
-  function showOverlay({ title, html, showRestart1=false }) {
+  function showOverlay({ title, html, showRestart1=false, isFinal=false }) {
     ovTitle.textContent = title;
     ovBody.innerHTML    = html;
     btnRestartStage1.style.display = showRestart1 ? 'inline-flex' : 'none';
     overlay.classList.remove('hidden');
+    finalClearShown = !!isFinal;
     paused = true;
   }
   function hideOverlay(){
     overlay.classList.add('hidden');
     paused = false;
   }
-  btnCloseOverlay.addEventListener('click', () => hideOverlay());
+  btnCloseOverlay.addEventListener('click', () => {
+    if(finalClearShown){
+      stage = 0;
+      grid = levels[stage].grid.map(row=>row.slice());
+      startTime = performance.now();
+      failCount = 0;
+      applySpawn();
+      finalClearShown = false;
+    }
+    hideOverlay();
+  });
   btnRestartStage1.addEventListener('click', () => {
     stage = 0;
     grid = levels[stage].grid.map(row=>row.slice());
     startTime = performance.now();
     failCount = 0;
     applySpawn();
+    finalClearShown = false;
     hideOverlay();
   });
 
@@ -333,12 +358,13 @@
   function tileAt(px, py){
     const c = Math.floor(px / TILE);
     const r = Math.floor(py / TILE);
-    if(c < 0 || c >= COLS || r < 0) return T.RED;
-    if(r >= ROWS) return T.EMPTY;
+    if(c < 0 || c >= COLS || r < 0) return T.RED;   // 좌/우/위는 벽
+    if(r >= ROWS) return T.EMPTY;                   // 아래 낭떠러지
     return grid[r][c];
   }
   function setTile(c, r, val){ if(r>=0&&c>=0&&r<ROWS&&c<COLS) grid[r][c]=val; }
 
+  // 입력 처리
   function handleInput(){
     if(arrowMode){ ball.vx = arrowDir * ARROW_SPEED; return; }
     const left  = keys.has('arrowleft') || keys.has('a') || keys.has('touchleft');
@@ -348,7 +374,9 @@
     else                     ball.vx =  0;
   }
 
+  // 물리
   function physics(dt){
+    // 화살표 활주 모드
     if(arrowMode){
       ball.vy = 0;
       let newX = ball.x + ball.vx * dt;
@@ -359,8 +387,9 @@
       const yBot = ball.y + ball.radius - 1;
       if([yTop,yMid,yBot].some(y=>tileAt(probeX,y)===T.RED)){
         const tileC = Math.floor(probeX / TILE);
-        if(signX>0) newX = tileC * TILE - ball.radius - 0.01; else newX = (tileC+1) * TILE + ball.radius - 0.01;
+        if(signX>0) newX = tileC * TILE - ball.radius - 0.01; else newX = (tileC+1) * TILE + ball.radius + 0.01;
         ball.x = newX;
+        // 벽 충돌 시 활주 종료 -> 수직 튀김 시작
         arrowMode = false; arrowDir = 0; ball.vx = 0; ball.vy = BOUNCE_VY;
       } else {
         ball.x = newX;
@@ -369,8 +398,10 @@
       return;
     }
 
+    // 일반 모드
     ball.vy += GRAVITY * dt;
 
+    // X 이동 + RED 충돌
     let newX = ball.x + ball.vx * dt;
     const signX = Math.sign(ball.vx) || 1;
     const probeX = newX + signX * ball.radius;
@@ -384,6 +415,7 @@
     }
     ball.x = newX;
 
+    // Y 이동
     let newY = ball.y + ball.vy * dt;
     const signY = Math.sign(ball.vy) || 1;
     const probeY = newY + signY * ball.radius;
@@ -406,14 +438,16 @@
     }
 
     if(hitRedTop || hitWhite || hitJumper || hitBomb || arrow){
-      if(signY>0){
+      if(signY>0){ // 바닥 접촉
         const tileR = Math.floor(probeY / TILE);
         newY = tileR * TILE - ball.radius - 0.01;
         if(hitBomb){ gameOver(); return; }
+        // 화살표: 수평 활주 모드 전환
         if(arrow){ arrowMode = true; arrowDir = arrow; ball.vx = arrow * ARROW_SPEED; ball.vy = 0; ball.y = newY; return; }
+        // 점퍼/일반 튕김
         ball.vy = hitJumper ? BOUNCE_VY * 1.65 : BOUNCE_VY;
         if(hitWhite && whiteCR) setTile(whiteCR[0], whiteCR[1], T.EMPTY);
-      } else {
+      } else { // 천장 충돌
         const tileR = Math.floor(probeY / TILE);
         newY = (tileR+1) * TILE + ball.radius + 0.01;
         ball.vy *= -1;
@@ -421,8 +455,11 @@
     }
 
     ball.y = newY;
+
+    // 낙사
     if(ball.y - ball.radius > H + 4){ gameOver(); return; }
 
+    // Goal
     const c = Math.floor(ball.x / TILE), r = Math.floor(ball.y / TILE);
     if(grid[r] && grid[r][c] === T.GOAL){ nextStage(); }
   }
@@ -440,7 +477,8 @@
       showOverlay({
         title:'축하합니다! 모든 스테이지 클리어 🎉',
         html:`걸린 시간: <b>${elapsed}초</b><br>실패 횟수: <b>${failCount}</b>`,
-        showRestart1:true
+        showRestart1:true,
+        isFinal:true
       });
       return;
     }
@@ -452,6 +490,7 @@
     if(stage === 0){ startTime = performance.now(); failCount = 0; }
   }
 
+  // 렌더링
   function draw(){
     ctx.fillStyle = '#000';
     ctx.fillRect(0,0,W,H);
@@ -490,15 +529,25 @@
       }
     }
 
-    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2); ctx.fill();
+    // 공
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
+    ctx.fill();
 
+    // 꼬리
     ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-    ctx.beginPath(); ctx.moveTo(ball.x, ball.y);
-    ctx.lineTo(ball.x - ball.vx*0.05, ball.y - ball.vy*0.05); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(ball.x, ball.y);
+    ctx.lineTo(ball.x - ball.vx*0.05, ball.y - ball.vy*0.05);
+    ctx.stroke();
 
     if(messageTimer>0){
-      ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0,0,W,24);
-      ctx.fillStyle = '#fffa'; ctx.font = '12px monospace'; ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(0,0,W,24);
+      ctx.fillStyle = '#fffa';
+      ctx.font = '12px monospace';
+      ctx.textAlign = 'center';
       ctx.fillText(messageText + ' (Stage ' + (stage+1) + ')', W/2, 16);
     }
   }
